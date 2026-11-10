@@ -13,7 +13,7 @@ export class PncpService {
     @InjectRepository(PncpItem)
     private readonly pncpItemRepository: Repository<PncpItem>,
     private readonly notificationsService: NotificationsService,
-  ) {}
+  ) { }
 
   @Cron(CronExpression.EVERY_30_MINUTES)
   async executarCronAgendado() {
@@ -35,69 +35,70 @@ export class PncpService {
       const ano = hoje.getFullYear();
       const mes = String(hoje.getMonth() + 1).padStart(2, '0');
       const dia = String(hoje.getDate()).padStart(2, '0');
-      const dataFormatada = `${ano}-${mes}-${dia}`;
 
-      const url = `https://pncp.gov.br/api/search/v1/contratacoes?dataInicial=${dataFormatada}&dataFinal=${dataFormatada}&modalidadeContratacaoId=8&pagina=1`;
+      // O novo endpoint exige o formato YYYYMMDD
+      const dataFormatadaConsulta = `${ano}${mes}${dia}`;
+      const dataFormatadaIso = `${ano}-${mes}-${dia}`;
 
-      let itens: any[] = [];
+      // URL corrigida conforme o contrato exigido pela API atual do PNCP
+      const url = `https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao?dataInicial=${dataFormatadaConsulta}&dataFinal=${dataFormatadaConsulta}&codigoModalidadeContratacao=8&pagina=1`;
+
+      this.logger.log(`[PNCP] Consultando API oficial: ${url}`);
 
       const response = await fetch(url, {
         headers: {
           'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+          'User-Agent': 'CTAMAZONIA-Monitor/1.0',
         },
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        itens = Array.isArray(data) ? data : (data.items || data.resultado || data.content || []);
+      if (!response.ok) {
+        const erroTexto = await response.text();
+        throw new Error(`Erro na API do Governo (${response.status}): ${erroTexto}`);
       }
 
-      // Se a API não retornar nada para a data de hoje, usamos itens reais extraídos do PNCP
-      if (!itens || itens.length === 0) {
-        this.logger.warn(`Modo de homologação: Carregando edital real existente no PNCP...`);
-        
-        // Exemplo real registrado no PNCP (CNPJ do Ministério da Economia / Governo Federal)
-        itens = [
-          {
-            numeroControlePNCP: '00394460000141-1-000001/2024',
-            objeto: 'Contratação de serviços de tecnologia da informação, suporte técnico e manutenção de sistemas corporativos.',
-            orgaoNome: 'Ministério da Gestão e da Inovação em Serviços Públicos',
-            uf: 'DF',
-            // URL real e existente no PNCP público
-            linkSistemaOrigem: 'https://pncp.gov.br/app/editais/00394460000141/2024/1',
-            valorEstimado: 85000.00,
-            dataPublicacao: dataFormatada,
-          }
-        ];
+      const data = await response.json();
+
+      // O endpoint de consulta costuma retornar uma lista direta ou dentro de .data / .items
+      const itens: any[] = Array.isArray(data) ? data : (data.data || data.items || data.resultado || data.content || []);
+
+      if (itens.length === 0) {
+        this.logger.log(`[PNCP] Nenhuma dispensa encontrada no portal para a data de hoje (${dataFormatadaIso}).`);
+        return {
+          status: 'Sucesso',
+          totalProcessados: 0,
+          novasOportunidadesSalvas: 0,
+        };
       }
 
       let novasOportunidades = 0;
+      const termosTi = ['software', 'sistema', 'portal', 'consultoria', 'ti', 'informática', 'desenvolvimento', 'computador', 'tecnologia', 'rede', 'serviços', 'servicos'];
 
       for (const item of itens) {
         const objeto = (item.objetoContratacao || item.objeto || '').toLowerCase();
-        
-        const termosTi = ['software', 'sistema', 'portal', 'consultoria', 'ti', 'informática', 'desenvolvimento', 'computador', 'tecnologia', 'rede', 'serviços'];
-        const contemTermoTi = termosTi.some(termo => objeto.includes(termo));
+
+        const contemTermoTi = termosTi.some(termo => {
+          const regex = new RegExp(`\\b${termo}\\b`, 'i');
+          return regex.test(objeto);
+        });
 
         if (contemTermoTi) {
-          const controlePncpId = item.numeroControlePNCP || `${item.cnpjOrgao}-${item.ano}-${item.sequencial || Math.random()}`;
+          const controlePncpId = item.numeroControlePNCP || `${item.cnpjOrgao}-${item.ano}-${item.sequencial || 'sem-id'}`;
 
           const existe = await this.pncpItemRepository.findOne({ where: { controlePncpId } });
 
-          // Link real vindo da API ou fallback real
-          const linkValido = item.linkSistemaOrigem || item.url || `https://pncp.gov.br/app/editais/00394460000141/2024/1`;
-
           if (!existe) {
+            const linkValido = item.linkSistemaOrigem || item.url || `https://pncp.gov.br`;
+
             const novoItem = this.pncpItemRepository.create({
               controlePncpId,
-              numeroControlePNCP: controlePncpId,
+              numeroControlePNCP: item.numeroControlePNCP || controlePncpId,
               objeto: item.objetoContratacao || item.objeto || 'Sem descrição',
               orgaoNome: item.orgaoNome || item.nomeOrgao || 'Órgão público',
-              uf: item.uf || item.siglaUf || 'AM',
+              uf: item.uf || item.siglaUf || 'BR',
               linkSistemaOrigem: linkValido,
               valorEstimado: item.valorEstimado || 0,
-              dataPublicacao: item.dataPublicacao || dataFormatada,
+              dataPublicacao: item.dataPublicacao || dataFormatadaIso,
             });
 
             const itemSalvo = await this.pncpItemRepository.save(novoItem);
@@ -108,6 +109,8 @@ export class PncpService {
         }
       }
 
+      this.logger.log(`[PNCP] Processo concluído: ${itens.length} lidas, ${novasOportunidades} gravadas.`);
+
       return {
         status: 'Sucesso',
         totalProcessados: itens.length,
@@ -115,7 +118,7 @@ export class PncpService {
       };
 
     } catch (error: any) {
-      this.logger.error('Erro na execução do robô:', error.message);
+      this.logger.error(`[ERRO PNCP] Falha na execução do robô: ${error.message}`);
       return {
         status: 'Erro',
         mensagem: error.message,
