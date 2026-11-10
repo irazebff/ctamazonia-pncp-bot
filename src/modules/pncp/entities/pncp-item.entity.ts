@@ -29,6 +29,9 @@ export class PncpItem {
   @Column()
   dataPublicacao: string;
 
+  @Column({ nullable: true })
+  modalidadeNome: string;
+
   @CreateDateColumn()
   encontradoEm: Date;
 }
