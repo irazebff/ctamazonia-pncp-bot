@@ -1,17 +1,19 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Post } from '@nestjs/common';
 import { PncpService } from './pncp.service.js';
 
 @Controller('pncp')
 export class PncpController {
-  constructor(private readonly pncpService: PncpService) {}
+  constructor(private readonly pncpService: PncpService) { }
 
   @Get()
   async listarLicitações() {
-    return this.pncpService.consultarDispensasTi();
+    // Agora retorna a lista de oportunidades salvas no banco para o Frontend
+    return this.pncpService.listarTodos();
   }
 
-  @Get('executar')
+  @Post('varredura')
   async executarVarredura() {
+    // Dispara a busca manual de forma mais segura (via POST)
     return this.pncpService.consultarDispensasTi();
   }
 }
