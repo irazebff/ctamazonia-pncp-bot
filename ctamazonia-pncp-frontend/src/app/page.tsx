@@ -1,14 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Terminal, 
-  RefreshCw, 
-  FileText, 
-  Building2, 
-  DollarSign, 
-  ShieldCheck, 
-  Search, 
+import {
+  Terminal,
+  RefreshCw,
+  FileText,
+  Building2,
+  DollarSign,
+  ShieldCheck,
+  Search,
   ExternalLink,
   SlidersHorizontal,
   BellRing
@@ -58,6 +58,19 @@ export default function Page() {
     }
   };
 
+  const forcarVarredura = async () => {
+    setLoading(true);
+    try {
+      // 1. Dispara a varredura no portal governamental
+      await fetch('http://localhost:3000/pncp/varredura', { method: 'POST' });
+      // 2. Atualiza a lista lendo do banco de dados (que também remove o loading)
+      await carregarDados();
+    } catch (err) {
+      console.error('Erro ao acionar a varredura manual:', err);
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     carregarDados();
   }, []);
@@ -75,24 +88,24 @@ export default function Page() {
     const numeroTexto = (item.numeroControlePNCP || '').toLowerCase();
     const termoBusca = busca.toLowerCase().trim();
 
-    const atendeBusca = !termoBusca || 
-                        objetoTexto.includes(termoBusca) || 
-                        orgaoTexto.includes(termoBusca) || 
-                        numeroTexto.includes(termoBusca);
+    const atendeBusca = !termoBusca ||
+      objetoTexto.includes(termoBusca) ||
+      orgaoTexto.includes(termoBusca) ||
+      numeroTexto.includes(termoBusca);
 
     const ufItem = (item.uf || '').toUpperCase();
     const atendeUf = ufFiltro === 'Todos' || ufItem === ufFiltro.toUpperCase();
 
     const modalidadeItem = (item.modalidadeNome || 'Dispensa Eletrônica').toLowerCase();
-    const atendeModalidade = modalidadeFiltro === 'Todas' || 
-                             modalidadeItem.includes(modalidadeFiltro.toLowerCase());
+    const atendeModalidade = modalidadeFiltro === 'Todas' ||
+      modalidadeItem.includes(modalidadeFiltro.toLowerCase());
 
     return atendeBusca && atendeUf && atendeModalidade;
   });
 
   // Valor médio calculado com base nos itens filtrados
-  const valorMedio = dispensasFiltradas.length > 0 
-    ? dispensasFiltradas.reduce((acc, curr) => acc + Number(curr.valorEstimado || 0), 0) / dispensasFiltradas.length 
+  const valorMedio = dispensasFiltradas.length > 0
+    ? dispensasFiltradas.reduce((acc, curr) => acc + Number(curr.valorEstimado || 0), 0) / dispensasFiltradas.length
     : 0;
 
   return (
@@ -120,8 +133,8 @@ export default function Page() {
             <span>Última varredura PNCP: <strong className="text-white">{ultimaVarredura}</strong></span>
           </div>
 
-          <button 
-            onClick={carregarDados}
+          <button
+            onClick={forcarVarredura}
             disabled={loading}
             className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-semibold rounded-lg transition-all text-sm shadow-lg shadow-emerald-500/10 disabled:opacity-50 cursor-pointer"
           >
@@ -135,11 +148,10 @@ export default function Page() {
       <div className="flex items-center gap-8 mt-6 border-b border-slate-800/80">
         <button
           onClick={() => setActiveTab('licitacoes')}
-          className={`flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-all cursor-pointer ${
-            activeTab === 'licitacoes'
+          className={`flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-all cursor-pointer ${activeTab === 'licitacoes'
               ? 'border-emerald-400 text-emerald-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
+            }`}
         >
           <FileText className="w-4 h-4" />
           <span>Licitações Encontradas</span>
@@ -148,11 +160,10 @@ export default function Page() {
 
         <button
           onClick={() => setActiveTab('config')}
-          className={`flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-all cursor-pointer ${
-            activeTab === 'config'
+          className={`flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-all cursor-pointer ${activeTab === 'config'
               ? 'border-emerald-400 text-emerald-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
+            }`}
         >
           <SlidersHorizontal className="w-4 h-4" />
           <span>Configuração de Termos & Alertas</span>
@@ -255,8 +266,8 @@ export default function Page() {
               </div>
             ) : (
               dispensasFiltradas.map((item) => (
-                <div 
-                  key={item.id} 
+                <div
+                  key={item.id}
                   className="bg-[#0d1322] border border-slate-800/80 hover:border-slate-700/80 rounded-2xl p-5 transition-all group"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -346,7 +357,7 @@ export default function Page() {
               />
             </div>
 
-            <button 
+            <button
               onClick={() => alert('Configurações salvas no backend com sucesso!')}
               className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-lg text-sm transition-all shadow-lg shadow-emerald-500/10 cursor-pointer"
             >
